@@ -1,0 +1,1148 @@
+---
+title: "NSO's HCES 2023-24 Analysis Using R"
+author: "Sherick"
+format: 
+  pdf:
+    toc: true
+    number-sections: true
+editor: visual
+---
+
+# Abstract
+
+The study uses unit-level data from HCES 2-23-24 to investigate consumption and expenditure behaviour of Indian Households, employing R for descriptive and inferential statistics. The analysis examines MPCE, calorific intake, asset ownership and sees how sector (rural and urban), education level and social categories effect them. The study indicates that there is significant gap between rural and urban expenditure with p \< 2.22 e \^ -16. There exists an 80% of calorie deficiency of poorest decile of the sample population, education qualification increase consumption and non-essential assets are distributed unequally among different social categories.
+
+# Introduction
+
+Household Expenditure and Consumption is a critical metric for understanding economic well being, as they look over simple icnome figure and report nutritional intake, asset ownership and access to public welfare schemes. The report analysis NSO's 2023-24 Household Expenditure and Consumption Survey. The study employs computational analysis in R to under how location, education, social category effect consumption and expenditure of a household. The report also provides with the code which were used to for analysis for better understanding of analysis and logical flow.
+
+# Methodology
+
+The report work on a secondary structured data obtained from NSO's 2023-24 Household Expenditure and Consumption Survey. The survey sampling is done via random stratified sampling process, and the data is collected through a questionnaire tool-kit that is divided into four parts HCQ, FDQ, CSQ, DGQ. They are further divided into 14 sections, where each section captures a specific parts of consumption and expenditure. The data was downloaded from MoSPI website and its SPSS file was accessed through Nesstar application, where HCES data is available in different level files. One of the most important step for analysis is to familiarise oneself with the tool-kit (questionnaire).
+
+The data has been imported to R Studio for further analysis. To calculate MPCE we need to consolidate all the required levels into one file. For this task we must first create a common HHID for each household across different levels and use it as a common variables to join the levels. Then item code are categorised into Food, Non-Food and durable goods are categorised into essential and non-essential.
+
+For easy application and smooth functioning we have created data list of all the required levels and different points of the analysis, and the required manipulation to those files is done through creation of function and nested function via lapply. This step automates the tedious process of function application to each level and aims to make data handling of such larger files easy.\
+
+After initial manipulation of data, and selection of required variables from each level, original files will be removed to make code RAM friendly. And in order to answer each question question, question wise subset are created, this keeps the working files small and functioning of code smooth.
+
+After MPCE decile calculation mean MPCE decile and Median MPCE decile is created for descriptive analysis of MPCE, along with data visulatisation through bar charts, histograms, stacked bar chart, box plot and dot plot.this study utilized Independent Samples T-Tests for binary rural-urban comparisons, One-Way ANOVA to evaluate spending and asset ownership across education levels and social groups , and Tukey’s HSD Test as a post-hoc analysis to pinpoint specific categorical differences in expenditure. These tests were employed to validate hypotheses regarding structural economic disparities and the returns to educational attainment.
+
+# Data Preparation
+
+## Imported Library
+
+```{r}
+# Core Data Manipulation
+library(dplyr)
+library(tidyr)
+library(purrr)
+library(haven)
+# Visualization
+library(ggplot2)
+library(gridExtra) # For the 6-figure panel
+library(scales)
+
+load("ogFiles.RData")
+```
+
+## Data Set Navigation
+
+```{r}
+#| eval: false
+#| include: false
+## this here just to show how i have improted the required files from my desktop, this code chunk will not run (it is for dislay only)##
+#| eval: false
+#| include: false
+library(haven)
+LEVEL_02_Section_3_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 02 (Section 3).sav")
+View(LEVEL_02_Section_3_)
+library(haven)
+LEVEL_03 <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 03.sav")
+View(LEVEL_03)
+library(haven)
+LEVEL_05_Sec_5_6_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 05 ( Sec 5 & 6).sav")
+View(LEVEL_05_Sec_5_6_)
+library(haven)
+LEVEL_06_Section_7_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 06 (Section 7).sav")
+View(LEVEL_06_Section_7_)
+View(LEVEL_05_Sec_5_6_)
+library(haven)
+LEVEL_08_Section_8_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 08 (Section 8).sav")
+View(LEVEL_08_Section_8_)
+library(haven)
+LEVEL_09_Section_9_10_11_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 09 (Section 9 & 10 & 11).sav")
+View(LEVEL_09_Section_9_10_11_)
+library(haven)
+LEVEL_10_Section_12_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 10 (Section 12).sav")
+View(LEVEL_10_Section_12_)
+library(haven)
+LEVEL_12_Section_13_ <- read_sav("Desktop/NSSO_IMP_DATASET/LEVEL - 12 (Section 13).sav")
+View(LEVEL_12_Section_13_)
+library(haven)
+Level_13_Section_14_ <- read_sav("Desktop/NSSO_IMP_DATASET/Level - 13 (Section 14).sav")
+View(Level_13_Section_14_)
+```
+
+### Renaming The Files
+
+We rename the file for easy navigation.
+
+```{r}
+## Creating new names for the file ##
+L2 <- LEVEL_02_Section_3_
+L3 <- LEVEL_03
+L5 <- LEVEL_05_Sec_5_6_
+L6 <- LEVEL_06_Section_7_
+L8 <- LEVEL_08_Section_8_
+L9 <- LEVEL_09_Section_9_10_11_
+L10 <- LEVEL_10_Section_12_
+L12 <- LEVEL_12_Section_13_
+L13 <- Level_13_Section_14_
+```
+
+## **HHID CREATION**
+
+### Finding common variables to create HHID.
+
+We need to create a HHID for all the levels so that we can merge them and into a single file, for this task we must first know all the variables which are common in all the levels and then select the required variables from them to create a HHID
+
+```{r}
+## Create a single list for of the dataset ##
+dataList <- list(
+  L2 = L2,
+  L3 = L3,
+  L5 = L5,
+  L6 = L6,
+  L8 = L8,
+  L9 = L9,
+  L10 = L10,
+  L12 = L12,
+  L13 = L13
+)
+rm(
+ LEVEL_02_Section_3_,
+ LEVEL_03,
+ LEVEL_05_Sec_5_6_,
+ LEVEL_06_Section_7_,
+ LEVEL_08_Section_8_,
+ LEVEL_09_Section_9_10_11_,
+ LEVEL_10_Section_12_,
+ LEVEL_12_Section_13_,
+ Level_13_Section_14_
+)
+## We remove the files that are not needed so as 
+## to not overload the environment,
+## and to ensure smooth function of code
+
+## Finding common Variblaes (Column names) among
+## all dataset with help of newly created dataList to create a unique HHID ##
+commonVariables <- Reduce(
+  intersect,
+  lapply(dataList, names)
+)
+commonVariables
+```
+
+### Defining Function to create HHID
+
+After choosing the Variables for the common variable list to create HHID.\
+We now create HHID by defining a function to create HHID, using "lapply" to apply the function to all level at once.rm
+
+```{r}
+## creating a function which would hepl in creating an HHID ##
+createHHID <- function(df) {
+  df %>%
+    mutate(
+      HHID = paste(FSU_Serial_No, Sector, State, NSS_Region, District, 
+                   Stratum, Sub_stratum, Panel, Sub_sample, 
+                   FOD_Sub_Region, Sample_SU_No, Sample_Sub_Division_No,
+                   Second_Stage_Stratum_No, Sample_Household_No, sep = "_")
+    ) %>%
+    select (HHID, everything())
+}
+## applying that fuction to the dataList to create an HHID ##
+dataList <- lapply(dataList, createHHID) 
+```
+
+## **Data Cleaning and Variable Selection for Analysis**
+
+### Standardising Item Code name across levels
+
+Since most all of the Levels have different names for variable for Item Code we must first rename all the item code names as Item_Code for cleaning and making data navigation easy.
+
+```{r}
+## We create a function to rename 
+## all the variations of Item Code to "Item_Code" ##
+standerdiseItemCode <- function(df)
+{
+  itemCol <- intersect(
+    names(df),
+    c(
+      "ITEM_CODE", "Item_Code", "Item_Code_8_1", 
+      "Item_Code_9_1_to_11_4", "Item_Code_12_series"
+    )
+  )
+   if (length(itemCol) == 0) return(df)
+   df %>% rename(Item_Code = all_of(itemCol))
+}
+```
+
+### Creating SubSection and ReferencePeriod Variable
+
+Now we create a new variable that tells the subsection and reference period of the item code, since reference period is necessary for conversion and standerdisation of cost value.
+
+These variables will be necessary in solving the assignment question
+
+```{r}
+## Cretae a fucntion to add a varibel for Sub_Section 
+## and Reference Period Using item code. ##
+## This is done through nested pipeing ##
+
+## The only item code for subtotal are choosen, 
+## this is done to keep the data set clean and to prevent duplication. ##
+
+defineSubtotal <- function(df){
+
+  # this checks taht of df does not habe Item_Code then 
+  # it returns the df as it is #
+  if(!"Item_Code" %in% names(df)) return(df)
+  df %>%
+    mutate(
+      Sub_Section = recode(
+        Item_Code, 
+        `129` = "5.1", `159` = "5.2", `179` = "5.3", `169` = "6.1",
+        `219` = "6.2", `239` = "6.3", `249` = "6.4", `199` = "6.5",
+        `189` = "6.6", `269` = "6.7", `279` = "6.8", `289` = "7.1", 
+        `299` = "7.2", `349` = "8.1", `459` = "9.1", `479` = "9.2", 
+        `409` = "10.1",`419` = "10.2",`429` = "10.3",`519` = "11.1", 
+        `499` = "11.2", `439` = "11.3",`309` = "12.1", `319` = "12.2", 
+        `329` = "12.3",`379` = "13.1", `399` = "13.2", `389` = "13.3", 
+        `629` = "14.1", `609` = "14.2",`099` = "14.3", `619` = "14.4",
+        `599` = "14.5",`579` = "14.6",`559` = "14.7",`569` = "14.8",
+        `639` = "14.9", `649` = "14.10",
+        .default = NA_character_
+      ),
+      .before = Item_Code
+    ) %>%
+    mutate(
+      ReferencePeriod = case_when(
+        Sub_Section %in% c("5.1", "5.2", "5.3", "8.1", "9.1", "9.2",
+                           "10.3", "11.1", "11.2", "11.3") ~ 30,
+        
+        Sub_Section %in% c("6.1", "6.2", "6.3", "6.4", "6.5", "6.6",
+                           "6.7", "6.8", "7.1", "7.2",
+                           "12.1", "12.2", "12.3") ~ 7,
+        
+        Sub_Section %in% c("10.1", "10.2", "13.1", "13.2", "13.3",
+                           "14.1", "14.2", "14.3", "14.4", "14.5",
+                           "14.6", "14.7", "14.8", "14.9", "14.10") ~ 365,
+        
+        TRUE ~ NA_real_ 
+      ),
+      .after = Item_Code
+    )
+}
+```
+
+Now we using the HCES question block classification of H, F, C, D. Now we categories items into Food and Non_Food Item.
+
+```{r}
+itemCat <- function(df) 
+  df %>% mutate(Cat = case_when(
+  Questionnaire_No == "F" ~ "Food",
+  Questionnaire_No %in% c("C", "D") ~ "NonFood",
+  TRUE ~ "Other"
+))
+```
+
+### Adding new variables to dataList
+
+Now we used a nested function to combine the first function which creates a standard Item Code name and the second function which adds Sub Section and Reference Period. This helps us to easily apply all the created functions to the dataList in one swift move.
+
+```{r}
+newItem <- function(df) {
+  df %>%
+    standerdiseItemCode() %>%
+    defineSubtotal()%>%
+    itemCat()
+}
+newData <- lapply(dataList, newItem)
+rm(dataList)
+
+## We remove the files that are not needed so as to not overload the environment, 
+## and to ensure smooth function of code ##
+```
+
+### Filter Item Codes
+
+Now we filter the out item code for which reference period is not given. This is done because we have only taken reference period for item code that relate to Sub-Total of a Sub-Section, this we we can prevent data duplication and also make our data concise, ram firendly and easy to work with.
+
+```{r}
+subtotalData <- lapply (
+  newData,
+  function(df){ 
+    if(!"ReferencePeriod" %in% names(df)) return(df)
+    dplyr::filter(df, !is.na(ReferencePeriod))
+}
+    )
+```
+
+### Selecting Key Variables
+
+#### Function to select variables from all levels
+
+Each level has several variables which we do not need, so we create a function that selects the required variable only. This step help us to automate the meticulous process of manually selecting variables saving time while also making code concise and readable.
+
+```{r}
+selectVariable <- function(df, valueColname) {
+  df %>%
+    dplyr::transmute(
+      HHID,
+      Cat,
+      Item_Code,
+      ReferencePeriod,
+      Sub_Section,
+      MonthlyConsV =
+        as.numeric(.data[[valueColname]]) *
+        (30 / as.numeric(ReferencePeriod))
+    )
+}
+```
+
+#### Selection
+
+Since, the HHID has been created in the datafile inside the "dataList", we now create a new dataframe for each level which contains the HHID and only the required variables form that level. This will help in easy navigation and reducing the complexity of data.
+
+It only keeps the item-code mapping to the subtotal of each question of each section. this way we can get data for each question without having to go through every item code, also each question relates to a spefic category of items. Therefore making analysis easier by reducing items while keeping the consumption and expenditure essence of the survey, also it removes the risk of duplication of data
+
+This level also looks at the reference period of the item code and coverts it to montlhy bases.
+
+```{r}
+sec_2 <- subtotalData$L2 %>%
+  select(
+    HHID, Relation_to_Head, Education_Level
+  ) %>%
+  mutate(Relation_to_Head = zap_labels(Relation_to_Head)) %>%
+  filter(
+    as.character(Relation_to_Head) == 1
+  )
+
+sec_3 <- subtotalData$L3 %>%
+  select(
+    HHID, Sector, HH_Size_FDQ, Social_Group_of_HH_Head, Multiplier
+    )
+
+sec_5_6 <- selectVariable(
+  subtotalData$L5,
+    "Total_Consumption_Value"
+     )
+
+sec_7 <- selectVariable(
+  subtotalData$L6,
+  "Total_Consumption_Value"
+)
+
+sec_8 <- selectVariable (
+        subtotalData$L8,
+        "Total_consumption_value_rs"
+        )
+
+sec_9_10_11 <- selectVariable(
+  subtotalData$L9,
+  "Value_Rs_9_1_to_11_4"
+)
+  
+sec_12 <- selectVariable(
+  subtotalData$L10,
+    "Total_Consumption_Value_12_serie"
+)
+
+sec_13 <- selectVariable(
+  subtotalData$L12,
+        "VALUE"
+)
+
+
+sec_14 <- selectVariable(
+  subtotalData$L13,
+  "TOTAL_EXPENDITURE"
+)
+rm(subtotalData)
+
+## We remove the files that are not needed so as to not overload the environment,              ## and to ensure smooth function of code ##
+```
+
+### Creating Master Sheet
+
+Now we create a master sheet all of the data relating to consumption and expenditure, this allows us to analyse the data and then further subset if needed.
+
+```{r}
+HH_base <- sec_3 %>%
+  left_join(sec_2, by = "HHID")
+## We join sec_3 and sec_2 since they have one row per HHID, 
+## and we create a HH_Base which contains the household deatils ##
+
+consumption_All <- bind_rows(
+  sec_5_6,sec_7,sec_8,sec_9_10_11,sec_12,sec_13,sec_14
+)
+## We Row bind rest of the section so that data can stack on top of each other
+## and create a consumption_All df which contians all the consumption details. 
+## Since in these sections there are several rows per HHID ##
+
+masterData <- HH_base %>%
+  left_join(consumption_All, by = "HHID")
+## Then we join them using left join to consumption_All to HH_Base by HHID.
+## Thus, giving us the final masterData which contains both HH details and
+## Consumption details ##
+
+```
+
+Code
+
+```{r}
+# 1. Create a Table for TOTAL HH MPCE and Deciles
+
+hh_totals <- masterData %>%
+  group_by(HHID, HH_Size_FDQ, Sector, 
+           Education_Level, Social_Group_of_HH_Head) %>%
+  summarise(
+    Total_Monthly_Cons = sum(MonthlyConsV, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    Total_MPCE = Total_Monthly_Cons / HH_Size_FDQ,
+    Decile = ntile(Total_MPCE, 10) # Ranking based on TOTAL wealth
+  )
+
+## 2. Create Categorical Analysis Table ##
+## We keep Cat here for Food vs Non-Food comparisons ##
+
+hh_analysis <- masterData %>%
+  group_by(HHID, Cat) %>%
+  summarise(
+    Monthly_Cons = sum(MonthlyConsV, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+## Joining the Total_MPCE and Decile back into the categorical data ##
+  left_join(
+    hh_totals, 
+    by = "HHID"
+  ) %>%
+  mutate(
+    Cat_MPCE = Monthly_Cons / HH_Size_FDQ 
+## Spending per person on this specific category ##
+  )
+```
+
+```{r}
+## 1. Rank households by their total spending (One rank per HHID) ##
+hh_ranks <- hh_totals %>%
+  group_by(Sector) %>% 
+  mutate(Decile = ntile(Total_MPCE, 10)) %>%
+  select(HHID, Sector, Decile, Total_MPCE) %>%
+  ungroup() # Always ungroup after a mutate/select to prevent future errors
+
+## 2. Map that rank onto the categorical data ##
+hh_analysis <- hh_analysis %>%
+  select(-any_of(c("Decile", "Total_MPCE", "Sector"))) %>% 
+  left_join(hh_ranks, by = "HHID")
+```
+
+### Question wise dataset subsection
+
+```{r}
+## Q1: Comparing Food vs Non-Food ##
+## We keep the long format (two rows per HH) to see the split. ##
+q1 <- hh_analysis %>%
+  select(HHID, Cat_MPCE, Total_MPCE, Decile, Cat, Sector)
+
+## Q2, Q4, & Q5: General Welfare Analysis ##
+
+## We use distinct() to get ONE row per household, 
+## otherwise the averages for Sector, 
+## Education, and Social Group will be wrong (double counted). ##
+q2_4_5_base <- hh_analysis %>%
+  distinct(HHID, .keep_all = TRUE) 
+
+q2 <- q2_4_5_base %>%
+  select(HHID, Total_MPCE, Decile, Sector)
+
+q4 <- q2_4_5_base %>%
+  select(HHID, Total_MPCE, Decile, Education_Level)
+
+q5 <- q2_4_5_base %>%
+  select(HHID, Total_MPCE, Decile, Social_Group_of_HH_Head)
+
+## Q3: Item Level (L5) ##
+## This stays largely the same but joins 
+## the NEW correct Decile from our totals.
+q3 <- newData$L5 %>%
+  select(HHID, Item_Code, Total_Consumption_Quantity, Source) %>%
+  left_join(
+    hh_totals %>% select(HHID, Decile, HH_Size_FDQ, Sector), 
+    by = "HHID"
+  )
+
+```
+
+Once the required data files have been made we can remove the files which are no longer required. This is done to keep environment clean and prevent ram overload.
+
+# Assignment Questions
+
+## Question 1
+
+```{r}
+q1_summary <- q1 %>%
+  filter(Cat %in% c("Food", "NonFood")) %>%
+  pivot_wider(names_from = Cat, values_from = Cat_MPCE, values_fill = 0) %>%
+  rename(Food_MPCE = Food, NonFood_MPCE = NonFood) %>%
+  group_by(Decile) %>%
+  summarise(
+    Avg_Total_MPCE      = mean(Total_MPCE, na.rm = TRUE),
+    Med_Total_MPCE      = median(Total_MPCE, na.rm = TRUE),
+    Avg_Food_MPCE       = mean(Food_MPCE, na.rm = TRUE),
+    Med_Food_MPCE       = median(Food_MPCE, na.rm = TRUE),
+    Avg_NonFood_MPCE    = mean(NonFood_MPCE, na.rm = TRUE),
+    Med_NonFood_MPCE    = median(NonFood_MPCE, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+### Graph
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+# 1. Define colors explicitly
+my_colors <- c("Total" = "#2c3e50", 
+               "Food" = "#27ae60", "Non-Food" = "#e67e22")
+
+# 1. Histogram + Density
+q1p1 <- ggplot(q1 %>% distinct(HHID, .keep_all = TRUE), aes(x = Total_MPCE)) +
+
+  ## This creates a new bar for every 500 units of currency (Rs) ##
+  geom_histogram(aes(y = after_stat(density)), fill = "steelblue", 
+                 color = "black", binwidth =   500, alpha = 0.7) +
+  geom_density(color = "red", linewidth = 1) + 
+  ## Keep the zoom to ignore the empty space on the right ##
+  coord_cartesian(xlim = c(0, 30000)) + 
+  
+  labs(
+    title = "1. MPCE Distribution",
+    subtitle = "Bin width = 500",
+    x = "Monthly Per Capita Expenditure (MPCE)", 
+    y = "Density"
+  ) + 
+  theme_minimal()
+
+# 2. Boxplots by Decile
+q1p2 <- ggplot(q1 %>% distinct(HHID, .keep_all = TRUE), 
+               aes(x = factor(Decile), y = Total_MPCE)) +
+  geom_boxplot(outlier.shape = NA, fill = "steelblue") + 
+  coord_cartesian(ylim = c(0, quantile(q1$Total_MPCE, 0.98, na.rm = TRUE))) +
+  labs(title = "2. Boxplot by Decile", 
+       x = "Decile", 
+       y = "MPCE") +  # <--- Added this line
+  theme_minimal()
+
+# 3. Mean Trends
+q1p3 <- ggplot(q1_summary, aes(x = Decile)) +
+  geom_line(aes(y = Avg_Total_MPCE, color = "Total"), linewidth = 1) +
+  geom_line(aes(y = Avg_Food_MPCE, color = "Food"), linewidth = 1) +
+  geom_line(aes(y = Avg_NonFood_MPCE, color = "Non-Food"), linewidth = 1) +
+  scale_color_manual(values = my_colors) + 
+  labs(title = "3. Mean Trends", color = "Expenditure") + theme_minimal()
+
+# 4. Median Trends
+q1p4 <- ggplot(q1_summary, aes(x = Decile)) +
+  geom_line(aes(y = Med_Total_MPCE, color = "Total"), 
+            linetype = "dashed", linewidth = 1) +
+  geom_line(aes(y = Med_Food_MPCE, color = "Food"), 
+            linetype = "dashed", linewidth = 1) +
+  geom_line(aes(y = Med_NonFood_MPCE, color = "Non-Food"), 
+            linetype = "dashed", linewidth = 1) +
+  scale_color_manual(values = my_colors) + 
+  labs(title = "4. Median Trends", color = "Expenditure") + theme_minimal()
+
+# 5. Mean Comparison (Side-by-Side Bars)
+q1p5 <- q1_summary %>%
+  pivot_longer(cols = c(Avg_Food_MPCE, Avg_NonFood_MPCE), 
+               names_to = "Cat_Type") %>%
+  ggplot(aes(x = factor(Decile), y = value, fill = Cat_Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Avg_Food_MPCE" = "#27ae60",
+                               "Avg_NonFood_MPCE" = "#e67e22"), 
+                    labels = c("Food", "Non-Food")) +
+  labs(title = "5. Mean Comparison (Dodge)", fill = "Category",
+       x = "Decile", y = "Mean MPCE") + 
+  theme_minimal()
+
+# 6. Median Comparison (Side-by-Side Bars)
+q1p6 <- q1_summary %>%
+  pivot_longer(cols = c(Med_Food_MPCE, Med_NonFood_MPCE), 
+               names_to = "Cat_Type") %>%
+  ggplot(aes(x = factor(Decile), y = value, fill = Cat_Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("Med_Food_MPCE" = "#27ae60",
+                               "Med_NonFood_MPCE" = "#e67e22"), 
+                    labels = c("Food", "Non-Food")) +
+  labs(title = "6. Median Comparison (Dodge)", fill = "Category", 
+       x = "Decile", y = "Median MPCE") + 
+  theme_minimal()
+
+# Re-run the arrangement
+gridExtra::grid.arrange(q1p1, q1p2, q1p3, q1p4, q1p5, q1p6, ncol = 2)
+```
+
+### Analysis
+
+#### 1. Overall Expenditure (MPCE)
+
+-   The Distribution (Plot 1): The data is heavily right-skewed as most households are clustered at the lower end (2,000–3,000 MPCE), indicating that the majority of the population lives on a modest budget, while a small minority spends significantly more.
+
+-   The Inequality Gap (Plot 2): As you move from Decile 1 to 10, the "spread" of the boxes increases drastically. The bottom 10% have very little variation (everyone is equally poor), while the top 10% shows massive variation in spending power.
+
+#### 2. Food vs. Non-Food Trends
+
+-   **Engel’s Law (Plots 3 & 4):**
+
+    -   Food (Green): Increases linearly and slowly. Even as people get richer, there is a limit to how much they spend on food. As income increases the contribution of food item to expenditure decreases.
+
+    -   Non-Food (Orange): Increases exponentially as once the basic needs are met, extra income is poured into non-food items (assets, services, luxury, and other personal items).
+
+-   **The Crossover Point (Plots 5 & 6):**
+
+    -   Deciles 1–6: Food is the dominant expense. These households prioritize subsistence.
+
+    -   Deciles 7–9: Non-food spending overtakes food. By Decile 10, non-food expenditure is nearly double that of food, showing a shift from "survival" to "lifestyle" spending.
+
+    -   Deciles 10: Non-food item significantly takes over food item in terms of expenditure.
+
+## Question 2
+
+```{r}
+# 1. Label and Clean
+q2 <- q2 %>%
+  mutate(Sector_Lab = case_when(
+    as.character(Sector) == "1" ~ "Rural",
+    as.character(Sector) == "2" ~ "Urban",
+    TRUE ~ "Unknown"
+  )) %>%
+  filter(Sector_Lab != "Unknown")
+
+# 2. Statistical T-Test (Using Total_MPCE)
+# This tests if the difference in standard of living between
+# Rural and Urban is significant
+t_test_result <- t.test(Total_MPCE ~ Sector_Lab, data = q2)
+
+# 3. Calculate Decile Curves (Rural vs Urban wealth gap across deciles)
+sector_deciles <- q2 %>%
+  group_by(Sector_Lab, Decile) %>%
+  summarise(
+    mean_mpce = mean(Total_MPCE, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Calculate Overall Means and 95% Confidence Intervals
+sector_stats <- q2 %>%
+  group_by(Sector_Lab) %>%
+  summarise(
+    mean_val = mean(Total_MPCE, na.rm = TRUE),
+    se = sd(Total_MPCE, na.rm = TRUE) / sqrt(n()),
+    lower = mean_val - (1.96 * se),
+    upper = mean_val + (1.96 * se),
+    .groups = "drop"
+  )
+```
+
+### Graph
+
+```{r}
+# 4. Two-Panel Visualization
+# Panel A: Decile Curves
+q2p_curves <- ggplot(sector_deciles, aes(x = factor(Decile), 
+                      y = mean_mpce, color = Sector_Lab, group = Sector_Lab))+
+  geom_line(linewidth = 1.2) +
+  geom_point() +
+  scale_color_manual(values = c("Rural" = "#27ae60", "Urban" = "#2980b9")) +
+  labs(title = "A. MPCE Trends by Decile", x = "Decile", 
+       y = "Mean MPCE", color = "Sector") +
+  theme_minimal()
+
+# Panel B: Mean Comparison with CI
+q2p_bar <- ggplot(sector_stats, aes(x = Sector_Lab, 
+                                    y = mean_val, fill = Sector_Lab)) +
+  geom_bar(stat = "identity", width = 0.5, alpha = 0.8) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.1) +
+  scale_fill_manual(values = c("Rural" = "#27ae60", "Urban" = "#2980b9")) +
+  labs(title = "B. Mean MPCE (95% CI)", subtitle = paste("p-value:", 
+                format.pval(t_test_result$p.value)), x = "Sector", 
+                y = "Mean MPCE") +
+  theme_minimal() + theme(legend.position = "none")
+
+# Final Arrangement
+# If you want to force the graphs to look more "polished"
+gridExtra::grid.arrange(
+  q2p_curves + theme(legend.position = "bottom"), 
+  q2p_bar, 
+  ncol = 2,
+  widths = c(1.2, 0.8) # Gives the line chart slightly more room
+)
+
+```
+
+### Analysis
+
+#### 1. Difference in Rural and Urban Regions.
+
+There is a stark and statistically significant disparity. Urban households (Blue) consistently spend more than Rural households (Green).
+
+-   Null Hypothesis: Rural and Urban households dont same expenditure and consumption.
+
+-   Alternate Hypothesis: Rural and Urban households have same expenditure and consumption.
+
+-   Statistically Meaningful: The difference is highly significant. As shown in Panel B, the p-value is `< 2.22e-16`(effectively zero), and the 95% confidence interval error bars do not overlap. We can confidently accept the null hypothesis that rural and urban spending is not the same.
+
+#### 2. Tthe Disparity.
+
+To answer the research question *“To what extent do rural and urban households differ in their average MPCE, and does this disparity widen, narrow, or remain stable across the expenditure deciles?”*
+
+The disparity widens significantly across the expenditure spectrum.
+
+-   Visual Evidence (Panel A):
+
+    -   Low Deciles (1-3): The gap between the blue and green lines is relatively small (though Urban is still higher).
+
+    -   Middle Deciles (4-7): The gap begins to grow steadily.
+
+    -   Top Deciles (8-10): The lines diverge sharply. The Urban curve exhibits a much steeper exponential rise than the Rural curve. By Decile 10, the vertical distance (inequality) between the two groups is at its absolute peak.
+
+-   Consistent Ranking: Yes. The Urban line is *always* above the Rural line at every single decile. There is no point in the distribution where the average Rural household outspends the average Urban household.
+
+-   Inconsistent Magnitude: No. The economic gap is not uniform. The inequality is far more severe among the wealthy (top 10%) than among the poor.
+
+Conclusion: Urban households enjoy a structurally higher standard of living, but the "Urban Premium" is most pronounced at the top. The richest urban dwellers are pulling away from the richest rural dwellers much faster than the urban poor are pulling away from the rural poor.
+
+## Question 3
+
+```{r}
+
+calorieLookup <- data.frame(
+  Item_Code = c(
+    61, 62, 70, 101, 102, 103, 105, 106, 107, 108, 110, 114, 1, 2,
+    140, 146, 148, 158, 152, 71, 73, 74, 178, 170, 171, 172, 173, 175,
+    160, 162, 164, 163, 165, 5, 201, 200, 202, 206, 203, 208, 207, 211,
+    213, 212, 210, 215, 214, 205, 216, 220, 236, 224, 231, 237, 230, 
+    228, 222, 232,240, 241, 243, 242, 246, 245,190, 195, 191, 192, 193, 194,
+    181, 184, 182, 183, 188, 95, 75
+  ),
+  Kcal_Per_1kg = c(
+    390, 364, 340, 360, 360, 360, 360, 360, 364, 364, 364, 364, 340, 340,
+    343, 352, 340, 340, 340,340, 0, 387, 0, 0, 387, 387, 383, 298,61, 321,
+    873, 61, 717, 103,24, 67, 17, 16, 21, 31, 25, 9, 19, 19, 19, 50, 31, 38,
+    15, 60, 48, 184, 45, 53, 26, 34, 17, 17, 636, 567, 252, 156, 299, 276.25,
+    139, 122, 150, 263, 130, 220,884, 884, 884, 884, 884, 0, 0
+  ),
+  Reference_Period_Days = c(
+    30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+    30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30,
+    7, 7, 7, 7, 7, 7,7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    7, 7,7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 
+    7, 7, 7, 7,7, 7, 7, 7, 7, 30, 30)
+)
+
+
+q3_item_daily <- q3 %>%
+  select(HHID, HH_Size_FDQ, Item_Code, Total_Consumption_Quantity, Source) %>%
+  mutate(Item_Code = as.numeric(Item_Code)) %>%
+  inner_join(calorieLookup, by = "Item_Code") %>%
+  mutate(
+    ## (Quantity * Kcal * 10) gives total calories consumed ##
+    ## Divide by Reference_Period_Days to get daily calories ##
+    Daily_Item_Kcal
+    = (as.numeric(Total_Consumption_Quantity) * Kcal_Per_1kg * 10) / 
+      as.numeric(Reference_Period_Days)
+  )
+
+q3_final <- q3_item_daily %>%
+  group_by(HHID, HH_Size_FDQ) %>%
+  summarise(
+    ## Sum daily calories for all items in the household ##
+    Total_HH_Daily_Kcal = sum(Daily_Item_Kcal, na.rm = TRUE), 
+    .groups = "drop"
+  ) %>%
+  mutate(
+    ## Divide by HH Size to get Per Capita ##
+    PC_Kcal = Total_HH_Daily_Kcal / as.numeric(HH_Size_FDQ),
+    is_cal_poor = if_else(PC_Kcal < 2100, 1, 0)
+  ) %>%
+  ## Join Decile/Sector info for the graphs ##
+  inner_join(hh_analysis %>% distinct(HHID, .keep_all = TRUE) %>% 
+               select(HHID, Decile, Sector), by = "HHID")
+
+q3_source_final <- q3_item_daily %>%
+  mutate(
+    Source_Label = case_when(
+      Source == 1 ~ "Purchase",
+      Source == 2 ~ "Home Grown",
+      Source == 7 ~ "PDS",
+      TRUE ~ "Other"
+    )
+  ) %>%
+  group_by(HHID, HH_Size_FDQ, Source_Label) %>%
+  summarise(
+    ## Sum daily calories per Source ##
+    Source_Daily_Kcal = sum(Daily_Item_Kcal, na.rm = TRUE), 
+    .groups = "drop"
+  ) %>%
+  ## Calculate Per Capita for the Source ##
+  mutate(Source_PC_Kcal = Source_Daily_Kcal / as.numeric(HH_Size_FDQ)) %>%
+  
+  ## Join with q3_final to get the Total PC_Kcal for the share calculation ##
+  inner_join(q3_final %>% select(HHID, PC_Kcal, Decile), by = "HHID") %>%
+  mutate(share = Source_PC_Kcal / PC_Kcal) %>%
+  filter(!is.na(share) & PC_Kcal > 0) %>%
+  
+  ## Finally, aggregate by Decile for the plot ##
+  group_by(Decile, Source_Label) %>%
+  summarise(mean_share = mean(share, na.rm = TRUE), .groups = "drop")
+
+
+```
+
+### Graph
+
+```{r}
+## p1: Intake Distribution ##
+q3p1 <- ggplot(q3_final %>% filter(PC_Kcal > 500 & PC_Kcal < 5000),
+               aes(x = PC_Kcal)) +
+  geom_density(fill = "#5DADE2", alpha = 0.5) +
+  geom_vline(xintercept = 2100, color = "red", linetype = "dashed") +
+  annotate("text", x = 2300, y = 0.0001, label = "Threshold (2100)", 
+           color = "red", angle = 90) +
+  labs(title = "Daily Per-Capita Calorie Intake",
+       x = "Kcal / Capita / Day", y = "Density") +
+  theme_minimal()
+
+## p2: Poverty Rate by Decile ##
+q3p2 <- q3_final %>%
+  group_by(Decile) %>%
+  summarise(poverty_rate = mean(is_cal_poor) * 100) %>%
+  ggplot(aes(x = factor(Decile), y = poverty_rate)) +
+  geom_bar(stat = "identity", fill = "#E74C3C") +
+  labs(title = "Calorie Poverty by Decile", x = "Decile", 
+       y = "% Below 2100 Kcal") +
+  theme_minimal()
+
+## p3: Source Composition ##
+q3p3 <- ggplot(q3_source_final, aes(x = factor(Decile), y = mean_share, fill = Source_Label)) +
+  geom_col() + 
+  scale_y_continuous(labels = scales::percent) +
+  # This splits the graph into 4 separate panels
+  facet_wrap(~Source_Label, scales = "free_y") + 
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Calorie Source Channels by Decile", 
+       subtitle = "Compositional share of each source",
+       x = "Decile", 
+       y = "Share of Total Calories", 
+       fill = "Source") +
+  theme_minimal() +
+  theme(legend.position = "none") # Legend is redundant due to panel titles
+ 
+grid.arrange(q3p1, q3p2, ncol = 2)
+q3p3
+```
+
+### Analysis
+
+#### 1. Expenditure vs. Nutritional Adequacy
+
+-   Widespread Deficit: The density curve reveals a significant portion of the population falls below the 2100 Kcal threshold.
+
+-   The Income Gradient: There is a stark negative correlation between wealth and calorie poverty. Over 80% of the poorest households (Decile 1) are calorie deficient, compared to only \~20% of the richest (Decile 10). This confirms that nutritional adequacy is primarily constrained by purchasing power.
+
+#### 2. Calorie Sourcing Patterns
+
+-   Market Dominance: Market purchases (Purple) are the primary source for all groups, but the share increases with wealth, rising from \~55% in Decile 1 to \~70% in Decile 10.
+
+-   Safety Nets: Lower deciles show a higher dependency on non-market sources—specifically PDS (Teal) and Home-Grown (Salmon) stocks—to supplement their intake.
+
+#### 3. Hypothesis
+
+-   Survival vs. Sufficiency: Lower-decile households employ a "diversified survival strategy," relying on PDS and home production to mitigate deficits but still failing to meet norms. Higher-decile households rely on a "market-dominant strategy," where superior purchasing power alone ensures nutritional sufficiency.
+
+## Question 4
+
+```{r}
+## 1. Clean and Club Education Levels (Using Total_MPCE) ##
+q4 <- q4 %>%
+  mutate(Edu_Group = case_when(
+  as.character(Education_Level) == "01" ~ "1. Not Literate",
+  as.character(Education_Level) %in% c("02", "03", "04") ~ "2. Primary",
+  as.character(Education_Level) %in% c("05", "06", "07", "08") ~ "3. Secondary",
+  as.character(Education_Level) %in% c("10") ~ "4. Higher Secondary",
+  as.character(Education_Level) %in% c("11", "12", "13") ~ "5. Grad & Above",
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Edu_Group))
+
+## 2. Re-run ANOVA with Total_MPCE ##
+## This tests if education level significantly impacts
+## a household's spending power ##
+anova_edu <- aov(Total_MPCE ~ Edu_Group, data = q4)
+summary(anova_edu)
+
+## 3. Post-hoc Tukey Test ##
+## This identifies which specific education jumps 
+## (e.g., Primary -> Secondary) ##
+## create the biggest increase in MPCE ##
+tukey_edu <- TukeyHSD(anova_edu)
+```
+
+### Graph
+
+```{r}
+## 1. Calculate Stats for Plot B using Total_MPCE ##
+edu_summary <- q4 %>%
+  group_by(Edu_Group) %>%
+  summarise(
+    mean_mpce = mean(Total_MPCE, na.rm = TRUE),
+    se = sd(Total_MPCE, na.rm = TRUE) / sqrt(n()),
+    lower = mean_mpce - (1.96 * se),
+    upper = mean_mpce + (1.96 * se),
+    .groups = "drop"
+  )
+
+## 2. Panel A: Boxplot ##
+q4p_box <- ggplot(q4, aes(x = Edu_Group, y = Total_MPCE, fill = Edu_Group)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  # Using the 98th percentile of Total_MPCE to keep the chart readable
+  coord_cartesian(ylim = c(0, quantile(q4$Total_MPCE,
+                           0.98, na.rm = TRUE))) +
+  scale_fill_brewer(palette = "Blues") +
+  labs(title = "A. Household Wealth by Education", x = ""
+                , y = "Total MPCE") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+                      legend.position = "none")
+
+## 3. Panel B: Mean Plot ##
+q4p_mean <- ggplot(edu_summary, aes(x = Edu_Group, 
+                y = mean_mpce, color = Edu_Group)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), 
+                width = 0.2, linewidth = 1) +
+  scale_color_brewer(palette = "Blues") +
+  labs(title = "B. Mean MPCE (95% CI)", 
+       subtitle = "Higher education correlates with higher spending power", 
+       x = "", y = "Mean Total MPCE") +
+  theme_minimal() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none")
+
+gridExtra::grid.arrange(q4p_box, q4p_mean, ncol = 2)
+```
+
+### Analysis
+
+#### 1. Does Education Impact Consumption?
+
+Null Hypothesis: Education is not a significant driver of household wealth and MPCE.
+
+Alternate Hypothesis: Education is a significant driver of household wealth and MPCE.
+
+Yes, education is a statistically significant driver of household wealth.
+
+-   **ANOVA Results:** The one-way ANOVA test yields an F-value of `11139` and a p-value of `< 2e-16` (effectively zero). This provides overwhelming evidence to reject the null hypothesis, confirming that mean MPCE is not equal across education groups, and that education level has effect on MPCE.
+
+-   **Visual Confirmation:** The boxplots (Panel A) and mean plots (Panel B) show a clear "stair-step" pattern where every increase in education level corresponds to a significant jump in monthly expenditure.
+
+#### 2. The "Returns to Education"
+
+The relationship is strictly positive and non-linear:
+
+-   **Low Education (Not Literate / Primary):** The gap in wealth is relatively small. The boxplots for "Not Literate" and "Primary" overlap slightly, suggesting that basic literacy alone provides a modest economic premium.
+
+-   **High Education (Secondary to Grad & Above):** The returns accelerate. "Grad & Above" households have a mean MPCE nearly double that of "Not Literate" households. The steep slope in Panel B clearly illustrates that higher education (especially post-secondary) is the strongest predictor of high consumption capacity.
+
+#### 3. Hypotheses on Educational Attainment
+
+Based on these findings, we can formulate the following:
+
+-   **Human Capital Hypothesis:** Higher education correlates with higher MPCE because it increases "human capital" skills and productivity which commands higher wages in the labor market.
+
+-   **Credential Hypothesis:** The widening gap at the top (between Secondary and Graduate) suggests that advanced degrees act as a gatekeeper to high-income salaried jobs, whereas lower levels of education may relegate workers to the informal or lower-wage sectors.
+
+## Question 5
+
+```{r}
+## Granular Classification of all Item Codes (L12 & L13) ##
+hh_item_level <- bind_rows(
+    newData$L12 %>% select(HHID, Item_Code),
+    newData$L13 %>% select(HHID, Item_Code)
+  ) %>%
+  mutate(Item_Code = as.character(Item_Code)) %>%
+  mutate(Asset_Logic_Type = case_when(
+# Essential (Clothing 350-374, Footwear 390-394, Bedding 380-386, etc.)
+    Item_Code %in% c("351", "352", "353", "363", "364", "354", 
+                     "358", "360", "355", "366", "367", "370", 
+                     "350", "371", "373", "372", "374", "393", 
+                     "390", "391", "392", "394", "380", "381", 
+                     "383", "382", "385", "384", "386", "580",
+                     "587", "591", "584", "583", "040", "610", 
+                     "611", "570", "571", "572", "573", "550", 
+                     "551", "552", "553", "555", "556", "557", 
+                     "623", "441", "600") ~ "Essential_Items",
+    
+# Non-essential (Recreation 560-564, Jewelry 640-643, 
+# Luxury Transport 601-602, Tech 622, etc.)
+    Item_Code %in% c("560", "561", "562", "563", "564", "640",
+                     "641", "642", "643", "601", "602", "622", 
+                     "620", "035", "625", "036", "037", "432", 
+                     "097", "581", "043", "588", "585", "582", 
+                     "046", "586", "590", "592") ~ "Non_Essential_Items",
+    
+    TRUE ~ NA_character_
+  )) %>%
+  filter(!is.na(Asset_Logic_Type))
+
+## Collapse to One Row Per Household (Total Counts) ##
+hh_intensity_counts <- hh_item_level %>%
+  group_by(HHID, Asset_Logic_Type) %>%
+  summarise(total_items = n(), .groups = "drop") %>%
+  pivot_wider(names_from = Asset_Logic_Type,
+              values_from = total_items, values_fill = 0)
+
+## Group by Social Group (Deduplicated Mapping) ##
+## We join with the unique social group labels ##
+hh_social_labels <- q5 %>%
+  select(HHID, Social_Group_of_HH_Head) %>%
+  distinct(HHID, .keep_all = TRUE)
+
+q5_intensity_final <- hh_intensity_counts %>%
+  inner_join(hh_social_labels, by = "HHID") %>%
+  mutate(Social_Group_Label = case_when(
+    as.character(Social_Group_of_HH_Head) == "1" ~ "ST",
+    as.character(Social_Group_of_HH_Head) == "2" ~ "SC",
+    as.character(Social_Group_of_HH_Head) == "3" ~ "OBC",
+    as.character(Social_Group_of_HH_Head) == "9" ~ "Others",
+    as.character(Social_Group_of_HH_Head) == "0" ~ "Not Reported",
+    TRUE ~ "Others"
+  ))
+
+## Calculate Average Intensity by Social Group & ANOVA ##
+## Find the averages ##
+q5_final_averages <- q5_intensity_final %>%
+  group_by(Social_Group_Label) %>%
+  summarise(
+    avg_essential = mean(Essential_Items, na.rm = TRUE),
+    avg_non_essential = mean(Non_Essential_Items, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+### Anova
+
+```{r}
+## Perform ANOVA to test if these averages are significantly different ##
+anova_non_ess <- aov(Non_Essential_Items ~ Social_Group_Label,
+                     data = q5_intensity_final)
+summary(anova_non_ess)
+```
+
+### Graph
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+q5_plot_averages <- q5_final_averages %>%
+  pivot_longer(cols = starts_with("avg"), names_to = "Asset_Class", 
+               values_to = "Mean_Count")
+
+## Create Individual Graphs (Essential & Non-Essential) ##
+
+# Graph 1: Essential Only
+p_essential <- q5_plot_averages %>%
+  filter(Asset_Class == "avg_essential") %>%
+  ggplot(aes(x = Social_Group_Label, y = Mean_Count, 
+             fill = Social_Group_Label)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(add = c(0, 1))) + 
+  labs(title = "Essential Items Only",
+       x = "Social Group", y = "Average Count") +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+# Graph 2: Non-Essential Only
+p_non_essential <- q5_plot_averages %>%
+  filter(Asset_Class == "avg_non_essential") %>%
+  ggplot(aes(x = Social_Group_Label, y = Mean_Count, 
+             fill = Social_Group_Label)) +
+  geom_bar(stat = "identity", alpha = 0.8) +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(expand = expansion(add = c(0, 1))) + 
+  labs(title = "Non-Essential Items Only",
+       x = "Social Group", y = "Average Count") +
+  theme_minimal() + 
+  theme(legend.position = "none")
+
+## Create Combined Graph (Grouped Bar Chart) ##
+
+# Graph 3: Both combined side-by-side
+p_combined <- ggplot(q5_plot_averages, aes(x = Social_Group_Label,
+                            y = Mean_Count, fill = Asset_Class)) +
+  geom_bar(stat = "identity", position = "dodge", alpha = 0.9, width = 0.7) +
+  scale_fill_brewer(palette = "Set2", 
+                    labels = c("avg_essential" = "Essential Items", 
+                               "avg_non_essential" = "Non-Essential Items")) +
+  scale_y_continuous(expand = expansion(add = c(0, 1))) + # Add 1 unit padding
+  labs(title = "Comparison: Essential vs. Non-Essential",
+       subtitle = "Side-by-side comparison of asset intensity",
+       x = "Social Group", 
+       y = "Average Count",
+       fill = "Asset Type") +
+  theme_minimal() + 
+  theme(legend.position = "top")
+
+# Layout: Essential and Non-Essential on top row #
+layout_matrix <- rbind(c(1, 2))
+
+grid.arrange(p_essential, p_non_essential, layout_matrix = layout_matrix)
+p_combined
+```
+
+### Analysis
+
+#### 1. Asset Ownership Patterns: Essential vs. Non-Essential
+
+-   Essential Assets (The "Leveler"): Ownership of essential items (Green bars) is remarkably uniform across all social groups. Whether OBC, SC, ST, or Others, the average household owns roughly 15-16 essential items.
+
+    -   *Interpretation:* This suggests that basic capabilities, subsistence and daily functioning are relatively accessible to all social strata, likely due to necessity or widespread availability.
+
+-   Non-Essential Assets (The "Differentiator"): A clear social gradient emerges here (Orange bars). The "Others" category (historically privileged groups) has the highest ownership of non-essential/discretionary items, followed by OBC, with SC and ST groups having the lowest.
+
+    -   *Interpretation:* While basic needs are met broadly, the accumulation of wealth and "comfort" assets remains stratified by social identity.
+
+-   While the ownership of essential assets is remarkably uniform across all social groups, non-essential asset ownership reveals significant stratification. This disparity suggests that marginalized groups (SC, ST, OBC) disproportionately allocate their limited resources toward subsistence and daily necessities, leaving them with little to no discretionary income to invest in non-essential or luxury items
+
+#### 2. The Influence of Social Positioning
+
+-   Access to Resources: The data indicates that social positioning significantly shapes access to discretionary resources. The "Others" group owns significantly more non-essential items (avg \> 4) compared to SC/ST groups (avg \< 3.5).
+
+-   Structural Inequality: The disparity implies that while "survival" (essential) is democratized, "prosperity" (non-essential) is still structurally linked to caste/social group status.
+
+#### 3. Statistical Hypothesis & Evaluation
+
+-   Null Hypothesis: Mean asset ownership is equal across all social groups.
+
+-   Alternate Hypothesis: Mean asset ownership differs for at least one social group.
+
+-   Test Results (ANOVA): The One-Way ANOVA yields an F-value of 721 and a p-value of \< 2e-16.
+
+-   Conclusion: We reject the null hypothesis. The differences in asset ownership across social groups are statistically significant and not due to random chance. The social group is a strong predictor of household asset intensity.
+
+# Conclusion
+
+The analysis of HCES 2023-24 validates that while basic survival needs are largely met, deep structural disparities persist in discretionary power. The study confirms Engel’s Law, showing a sharp shift from food to lifestyle expenditure only in the top deciles. Crucially, the "Urban" and "Education" premiums are non-linear, accelerating wealth accumulation for the privileged. Most significantly, asset analysis reveals that while essential assets act as a "leveler" across all social groups, non-essential assets act as a "differentiator." This proves that while survival is democratized, prosperity remains strictly stratified by caste and social positioning.
